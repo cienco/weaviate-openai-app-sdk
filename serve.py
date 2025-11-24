@@ -321,7 +321,19 @@ _MCP_DESCRIPTION = _load_text_source("MCP_DESCRIPTION", _MCP_DESCRIPTION_FILE)
 
 mcp = FastMCP(_MCP_SERVER_NAME)
 
+# Registra i widget decorati come risorse MCP
+# Questo deve essere fatto PRIMA di definire i tool che li usano
 register_decorated_widgets(mcp)
+
+# Debug: verifica che il widget sia registrato
+try:
+    # Verifica se il widget è stato registrato come risorsa
+    if hasattr(mcp, 'list_resources') or hasattr(mcp, '_resources'):
+        print("[widget] Widget resources registered successfully")
+    else:
+        print("[widget] Warning: Cannot verify widget registration")
+except Exception as e:
+    print(f"[widget] Warning: Error checking widget registration: {e}")
 
 def _apply_mcp_metadata():
     try:
@@ -428,6 +440,28 @@ def image_search_widget() -> dict:
 # Per usarlo, basta chiamare la funzione widget che restituisce build_widget_tool_response
 # che include automaticamente i metadata corretti per OpenAI Apps SDK
 
+# Prova ad aggiungere metadata direttamente al tool dopo la registrazione
+# FastMCP potrebbe non supportare _meta nel decorator, quindi lo aggiungiamo dopo
+def _add_widget_metadata_to_tool():
+    """Aggiunge metadata OpenAI al tool per associarlo al widget."""
+    try:
+        # Ottieni la funzione del tool
+        tool_func = open_image_search_widget
+        
+        # Prova ad aggiungere metadata tramite attributi della funzione
+        if not hasattr(tool_func, '__mcp_meta__'):
+            tool_func.__mcp_meta__ = {}
+        
+        tool_func.__mcp_meta__.update({
+            "openai/outputTemplate": "ui://widget/image-search.html",
+            "openai/toolInvocation/invoking": "Aprendo il widget di ricerca immagini...",
+            "openai/toolInvocation/invoked": "Widget di ricerca immagini aperto.",
+        })
+        
+        print("[widget] Added metadata to open_image_search_widget tool")
+    except Exception as e:
+        print(f"[widget] Warning: Could not add metadata to tool: {e}")
+
 @mcp.tool
 def open_image_search_widget() -> Dict[str, Any]:
     """
@@ -441,11 +475,12 @@ def open_image_search_widget() -> Dict[str, Any]:
     Il widget si aprirà nell'interfaccia di ChatGPT e potrai usarlo direttamente.
     Il widget caricherà automaticamente l'immagine e chiamerà image_search_vertex tramite window.openai.callTool.
     """
-    # build_widget_tool_response gestisce automaticamente:
-    # - L'associazione al widget tramite template_uri
-    # - I metadata OpenAI necessari per Apps SDK
-    # - La risposta strutturata
+    # Restituisce la risposta del widget
+    # build_widget_tool_response gestisce l'associazione al widget tramite template_uri
     return image_search_widget()
+
+# Aggiungi metadata dopo la definizione del tool
+_add_widget_metadata_to_tool()
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(_request):
@@ -614,6 +649,28 @@ def get_config() -> Dict[str, Any]:
         "weaviate_api_key_set": bool(os.environ.get("WEAVIATE_API_KEY")),
         "openai_api_key_set": bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")),
         "cohere_api_key_set": bool(os.environ.get("COHERE_API_KEY")),
+    }
+
+
+@mcp.tool
+def debug_widget() -> Dict[str, Any]:
+    """
+    Tool di debug per verificare lo stato del widget.
+    """
+    widget_html_path = _WIDGET_DIST_DIR / "index.html"
+    widget_exists = widget_html_path.exists()
+    
+    # Verifica se ci sono asset nella cartella dist
+    assets_dir = _WIDGET_DIST_DIR / "assets"
+    assets_exist = assets_dir.exists() if assets_dir else False
+    
+    return {
+        "widget_html_exists": widget_exists,
+        "widget_html_path": str(widget_html_path),
+        "assets_dir_exists": assets_exist,
+        "base_url": _BASE_URL,
+        "widget_template_uri": "ui://widget/image-search.html",
+        "widget_identifier": "image-search-widget",
     }
 
 

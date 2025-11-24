@@ -424,17 +424,27 @@ def image_search_widget() -> dict:
     )
 
 
+# Il widget è già registrato come risorsa MCP tramite @widget e register_decorated_widgets
+# Per usarlo, basta chiamare la funzione widget che restituisce build_widget_tool_response
+# che include automaticamente i metadata corretti per OpenAI Apps SDK
+
 @mcp.tool
 def open_image_search_widget() -> Dict[str, Any]:
     """
     Apre il widget interattivo per la ricerca di immagini.
+    
     Usa questo tool per aprire un'interfaccia grafica dove puoi:
     - Caricare un'immagine dal tuo dispositivo
-    - Cercare immagini simili nella collection Sinde
+    - Cercare immagini simili nella collection Sinde usando image_search_vertex
     - Visualizzare i risultati in modo interattivo
     
     Il widget si aprirà nell'interfaccia di ChatGPT e potrai usarlo direttamente.
+    Il widget caricherà automaticamente l'immagine e chiamerà image_search_vertex tramite window.openai.callTool.
     """
+    # build_widget_tool_response gestisce automaticamente:
+    # - L'associazione al widget tramite template_uri
+    # - I metadata OpenAI necessari per Apps SDK
+    # - La risposta strutturata
     return image_search_widget()
 
 @mcp.custom_route("/health", methods=["GET"])

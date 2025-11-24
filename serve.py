@@ -852,16 +852,59 @@ def _vertex_embed(image_b64: Optional[str] = None, text: Optional[str] = None, m
     raise RuntimeError("No embedding returned from Vertex AI")
 
 @mcp.tool
-def insert_image_vertex(collection: str, image_b64: str, caption: Optional[str] = None, id: Optional[str] = None) -> Dict[str, Any]:
+def insert_image_vertex(
+    collection: str,
+    image_id: Optional[str] = None,
+    image_url: Optional[str] = None,
+    caption: Optional[str] = None,
+    id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Inserisce un'immagine in Vertex/Weaviate.
+
+    Usa:
+      - image_id: ottenuto da upload_image o /upload-image
+      - oppure image_url: l'immagine verrà scaricata dal server.
+
+    La conversione in base64 è gestita internamente.
+    NON passare direttamente stringhe base64 da chat.
+    """
+    # 1) recupera base64 a partire da image_id o image_url
+    image_b64 = None
+
+    if image_id:
+        if image_id in _UPLOADED_IMAGES:
+            img_data = _UPLOADED_IMAGES[image_id]
+            if img_data["expires_at"] > time.time():
+                image_b64 = img_data["image_b64"]
+            else:
+                _UPLOADED_IMAGES.pop(image_id, None)
+                return {"error": f"Image ID {image_id} has expired. Please upload the image again."}
+        else:
+            return {"error": f"Image ID {image_id} not found. Use upload_image or /upload-image first."}
+
+    if image_url and not image_b64:
+        image_b64 = _load_image_from_url(image_url)
+        if not image_b64:
+            return {"error": f"Failed to load image from URL: {image_url}"}
+        image_b64 = _clean_base64(image_b64)
+        if not image_b64:
+            return {"error": f"Invalid image format from URL: {image_url}"}
+
+    if not image_b64:
+        return {"error": "Either image_id or image_url must be provided"}
+
+    # 2) embedding + insert, come facevi prima
     vec = _vertex_embed(image_b64=image_b64, text=caption)
     client = _connect()
     try:
         coll = client.collections.get(collection)
         if coll is None:
             return {"error": f"Collection '{collection}' not found"}
+
         obj = coll.data.insert(
             properties={"caption": caption, "image_b64": image_b64},
-            vectors={"image": vec}
+            vectors={"image": vec},
         )
         return {"uuid": str(getattr(obj, "uuid", "")), "named_vector": "image"}
     finally:

@@ -432,7 +432,7 @@ def image_search_widget_resource():
 # Step 2 - Describe tools (come nella guida ufficiale)
 # Il tool deve avere _meta["openai/outputTemplate"] nella definizione
 # mcp.server.fastmcp non supporta _meta come parametro, lo aggiungiamo dopo
-@mcp.tool
+@mcp.tool()
 def open_image_search_widget() -> Dict[str, Any]:
     """
     Apre il widget interattivo per la ricerca di immagini.
@@ -645,7 +645,7 @@ async def upload_image_endpoint(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@mcp.tool
+@mcp.tool()
 def get_instructions() -> Dict[str, Any]:
     """
     Restituisce le istruzioni/prompt configurati per questo server MCP.
@@ -659,7 +659,7 @@ def get_instructions() -> Dict[str, Any]:
     }
 
 
-@mcp.tool
+@mcp.tool()
 def reload_instructions() -> Dict[str, Any]:
     """
     Ricarica descrizione/prompt da variabili d'ambiente o file associati.
@@ -677,7 +677,7 @@ def reload_instructions() -> Dict[str, Any]:
     return get_instructions()
 
 
-@mcp.tool
+@mcp.tool()
 def get_config() -> Dict[str, Any]:
     return {
         "weaviate_url": os.environ.get("WEAVIATE_CLUSTER_URL") or os.environ.get("WEAVIATE_URL"),
@@ -687,7 +687,7 @@ def get_config() -> Dict[str, Any]:
     }
 
 
-@mcp.tool
+@mcp.tool()
 def debug_widget() -> Dict[str, Any]:
     """
     Tool di debug per verificare lo stato del widget.
@@ -709,7 +709,7 @@ def debug_widget() -> Dict[str, Any]:
     }
 
 
-@mcp.tool
+@mcp.tool()
 def check_connection() -> Dict[str, Any]:
     client = _connect()
     try:
@@ -719,7 +719,7 @@ def check_connection() -> Dict[str, Any]:
         client.close()
 
 
-@mcp.tool
+@mcp.tool()
 def upload_image(image_url: Optional[str] = None, image_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Carica un'immagine da URL o file path locale e restituisce un ID temporaneo da usare in hybrid_search o image_search_vertex.
@@ -784,7 +784,7 @@ def upload_image(image_url: Optional[str] = None, image_path: Optional[str] = No
     return {"image_id": image_id, "expires_in": 3600}
 
 
-@mcp.tool
+@mcp.tool()
 def list_collections() -> List[str]:
     client = _connect()
     try:
@@ -801,7 +801,7 @@ def list_collections() -> List[str]:
         client.close()
 
 
-@mcp.tool
+@mcp.tool()
 def get_schema(collection: str) -> Dict[str, Any]:
     client = _connect()
     try:
@@ -820,7 +820,7 @@ def get_schema(collection: str) -> Dict[str, Any]:
         client.close()
 
 
-@mcp.tool
+@mcp.tool()
 def keyword_search(collection: str, query: str, limit: int = 10) -> Dict[str, Any]:
     client = _connect()
     try:
@@ -846,7 +846,7 @@ def keyword_search(collection: str, query: str, limit: int = 10) -> Dict[str, An
         client.close()
 
 
-@mcp.tool
+@mcp.tool()
 def semantic_search(collection: str, query: str, limit: int = 10) -> Dict[str, Any]:
     client = _connect()
     try:
@@ -872,7 +872,7 @@ def semantic_search(collection: str, query: str, limit: int = 10) -> Dict[str, A
         client.close()
 
 
-@mcp.tool
+@mcp.tool()
 def hybrid_search(
     collection: str,
     query: str,
@@ -1118,7 +1118,7 @@ def _vertex_embed(image_b64: Optional[str] = None, text: Optional[str] = None, m
         return list(resp.embedding)
     raise RuntimeError("No embedding returned from Vertex AI")
 
-@mcp.tool
+@mcp.tool()
 def insert_image_vertex(
     collection: str,
     image_id: Optional[str] = None,
@@ -1177,7 +1177,7 @@ def insert_image_vertex(
     finally:
         client.close()
 
-@mcp.tool
+@mcp.tool()
 def image_search_vertex(collection: str, image_id: Optional[str] = None, image_url: Optional[str] = None, caption: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
     """
     Ricerca vettoriale per immagini usando near_image() (come su Colab).
@@ -1243,7 +1243,7 @@ def image_search_vertex(collection: str, image_id: Optional[str] = None, image_u
         client.close()
 
 
-@mcp.tool
+@mcp.tool()
 def diagnose_vertex() -> Dict[str, Any]:
     """
     Report Vertex auth status: project id, whether OAuth refresher is on, header presence, and token expiry sample.

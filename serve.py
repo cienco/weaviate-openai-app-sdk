@@ -896,6 +896,24 @@ def debug_widget() -> Dict[str, Any]:
     }
 
 
+def sinde_widget_push_results(
+    results_summary: str,
+    raw_results: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Tool usato SOLO dal widget Sinde per riportare i risultati al modello.
+
+    - results_summary: stringa breve che descrive i risultati mostrati nella UI
+    - raw_results: (opzionale) struttura dati grezza (lista di risultati, ecc.)
+
+    Il contenuto viene messo in structuredContent, così il modello può ragionarci.
+    """
+    return {
+        "summary": results_summary,
+        "raw_results": raw_results,
+    }
+
+
 @mcp.tool()
 def check_connection() -> Dict[str, Any]:
     client = _connect()
@@ -1458,6 +1476,7 @@ TOOL_REGISTRY: Dict[str, Any] = {
     "insert_image_vertex": insert_image_vertex,
     "image_search_vertex": image_search_vertex,  # Nota: questa non ha @mcp.tool() ma è una funzione normale
     "diagnose_vertex": diagnose_vertex,
+    "sinde_widget_push_results": sinde_widget_push_results,
 }
 
 
@@ -1595,18 +1614,38 @@ async def _list_tools() -> List[types.Tool]:
 
     # 2) Tutti gli altri tool normali
     for name in TOOL_REGISTRY.keys():
+        # Schema di default: argomenti liberi
+        input_schema: Dict[str, Any] = {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": True,
+        }
+
+        # Schema più preciso per il tool usato dal widget
+        if name == "sinde_widget_push_results":
+            input_schema = {
+                "type": "object",
+                "properties": {
+                    "results_summary": {
+                        "type": "string",
+                        "description": "Riassunto breve dei risultati mostrati nel widget.",
+                    },
+                    "raw_results": {
+                        "type": "object",
+                        "description": "Risultati grezzi (lista di match, metadati, ecc.).",
+                    },
+                },
+                "required": ["results_summary"],
+                "additionalProperties": False,
+            }
+
         tools.append(
             types.Tool(
                 name=name,
                 title=name,
                 description=name,
-                inputSchema={
-                    "type": "object",
-                    "properties": {},  # niente schema dettagliato per ora
-                    "required": [],
-                    "additionalProperties": True,  # il modello può passare qualsiasi argomento
-                },
-                # niente _meta speciale -> tool "normale", senza widget
+                inputSchema=input_schema,
                 annotations={
                     "destructiveHint": False,
                     "openWorldHint": True,
@@ -1734,6 +1773,15 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
                 )
             )
 
+        # Testo diverso se è il tool del widget
+        if name == "sinde_widget_push_results":
+            text_msg = (
+                "Ho ricevuto i risultati dal widget Sinde. "
+                "Trovi il riassunto e i dati in structuredContent.summary e structuredContent.raw_results."
+            )
+        else:
+            text_msg = f"Risultato del tool {name} disponibile in structuredContent."
+
         # Il risultato vero lo mettiamo in structuredContent,
         # così il modello lo vede in modo strutturato
         return types.ServerResult(
@@ -1741,7 +1789,7 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
                 content=[
                     types.TextContent(
                         type="text",
-                        text=f"Risultato del tool {name} disponibile in structuredContent.",
+                        text=text_msg,
                     )
                 ],
                 structuredContent=result if isinstance(result, dict) else {"result": result},

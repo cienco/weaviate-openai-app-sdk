@@ -85,6 +85,45 @@ export const ImageSearchWidget: React.FC = () => {
       const r = searchJson.results ?? [];
       setResults(Array.isArray(r) ? r : []);
       setStatus("Ricerca completata.");
+
+      // 3) PUSH al modello: costruisci riassunto e chiama il tool MCP
+      try {
+        // Costruisci un piccolo riassunto testuale per il modello
+        const top3 = r.slice(0, 3);
+        const summaryLines = top3.map((res: SearchResult, idx: number) => {
+          const props = res.properties || {};
+          const name = props.name || `risultato ${idx + 1}`;
+          const source = props.source_pdf || "sorgente sconosciuta";
+          const page = props.page_index ?? "?";
+          return `- ${name} (source: ${source}, page: ${page})`;
+        });
+
+        const resultsSummary = [
+          `Il widget Sinde ha trovato ${r.length} risultati.`,
+          `Ecco i primi ${top3.length}:`,
+          ...summaryLines,
+        ].join("\n");
+
+        // Chiama il tool MCP per pushare il riassunto nel modello
+        // @ts-ignore
+        const client = await (window as any).openai?.createClient();
+        
+        if (client) {
+          await client.tools.call({
+            name: "sinde_widget_push_results",
+            arguments: {
+              results_summary: resultsSummary,
+              raw_results: r, // opzionale, ma utile se vuoi dare più contesto
+            },
+          });
+          console.log("Risultati inviati al modello tramite sinde_widget_push_results");
+        } else {
+          console.warn("window.openai.createClient non disponibile (probabilmente in dev locale)");
+        }
+      } catch (err: any) {
+        console.error("Errore chiamando sinde_widget_push_results:", err);
+        // Non bloccare l'UI se la chiamata al tool fallisce
+      }
     } catch (err: any) {
       console.error(err);
       setStatus(`Errore: ${err?.message || String(err)}`);

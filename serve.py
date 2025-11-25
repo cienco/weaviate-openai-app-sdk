@@ -430,10 +430,19 @@ def _load_widget_html() -> str:
     ),
 )
 def image_search_widget() -> dict:
-    return build_widget_tool_response(
+    """
+    Funzione widget che restituisce la risposta con il widget HTML.
+    Questa funzione è decorata con @widget e viene registrata come risorsa MCP.
+    """
+    response = build_widget_tool_response(
         response_text="Ho aperto il widget di ricerca immagini.",
         structured_content={},
     )
+    
+    # Debug: verifica cosa restituisce build_widget_tool_response
+    print(f"[widget] build_widget_tool_response returned: {type(response)}, keys: {list(response.keys()) if isinstance(response, dict) else 'not a dict'}")
+    
+    return response
 
 
 # Il widget è già registrato come risorsa MCP tramite @widget e register_decorated_widgets
@@ -475,11 +484,31 @@ def open_image_search_widget() -> Dict[str, Any]:
     Il widget si aprirà nell'interfaccia di ChatGPT e potrai usarlo direttamente.
     Il widget caricherà automaticamente l'immagine e chiamerà image_search_vertex tramite window.openai.callTool.
     """
-    # Restituisce la risposta del widget
-    # build_widget_tool_response gestisce l'associazione al widget tramite template_uri
-    return image_search_widget()
+    # Restituisce la risposta del widget con i metadata espliciti
+    widget_response = image_search_widget()
+    
+    # Aggiungi esplicitamente i metadata necessari per OpenAI Apps SDK
+    # Questi metadata devono essere nella risposta del tool, non solo nel tool stesso
+    if isinstance(widget_response, dict):
+        # Assicurati che ci siano i metadata
+        if "_meta" not in widget_response:
+            widget_response["_meta"] = {}
+        
+        # Aggiungi i metadata OpenAI necessari per il rendering del widget
+        widget_response["_meta"].update({
+            "openai/outputTemplate": "ui://widget/image-search.html",
+        })
+        
+        # Aggiungi anche nella struttura principale se necessario
+        # Alcune versioni di Apps SDK potrebbero cercare i metadata qui
+        if "content" not in widget_response:
+            widget_response["content"] = []
+        
+        print(f"[widget] Returning widget response with metadata: {widget_response.get('_meta', {})}")
+    
+    return widget_response
 
-# Aggiungi metadata dopo la definizione del tool
+# Aggiungi metadata dopo la definizione del tool (per compatibilità)
 _add_widget_metadata_to_tool()
 
 @mcp.custom_route("/health", methods=["GET"])

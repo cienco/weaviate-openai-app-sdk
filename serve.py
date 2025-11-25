@@ -922,6 +922,7 @@ def debug_widget() -> Dict[str, Any]:
     }
 
 
+@mcp.tool()
 def sinde_widget_push_results(
     results_summary: str,
     raw_results: Optional[Dict[str, Any]] = None,

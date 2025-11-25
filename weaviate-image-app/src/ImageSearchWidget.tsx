@@ -15,6 +15,48 @@ type SearchResult = {
   distance?: number;
 };
 
+// 1) client SDK UNA VOLTA sola (inizializzato all'avvio)
+let client: any = null;
+try {
+  // @ts-ignore
+  if ((window as any).openai?.createClient) {
+    // @ts-ignore
+    client = (window as any).openai.createClient();
+  }
+} catch (e) {
+  console.warn("⚠️ window.openai.createClient non disponibile:", e);
+}
+
+// 2) funzione di utilità per pushare i risultati al modello
+async function pushResultsToModel(
+  results: SearchResult[],
+  extraInfo?: { query?: string; imageId?: string }
+) {
+  if (!client) {
+    console.warn("⚠️ Client OpenAI non disponibile, skip push risultati");
+    return;
+  }
+
+  const results_summary =
+    `Trovati ${results.length} risultati nella collection Sinde` +
+    (extraInfo?.query ? ` per la query "${extraInfo.query}"` : "") +
+    (extraInfo?.imageId ? ` (image_id=${extraInfo.imageId})` : "");
+
+  try {
+    await client.tools.call({
+      name: "sinde_widget_push_results", // deve combaciare con il nome MCP
+      arguments: {
+        results_summary,
+        raw_results: results,
+      },
+    });
+    console.log("✅ Risultati inviati al modello tramite sinde_widget_push_results");
+  } catch (err: any) {
+    console.error("❌ Errore chiamando sinde_widget_push_results:", err);
+    throw err; // Rilancia per gestione errori nel componente
+  }
+}
+
 export const ImageSearchWidget: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -80,57 +122,24 @@ export const ImageSearchWidget: React.FC = () => {
       }
 
       const searchJson = await searchResp.json();
-      
+
       // searchJson.results contiene i tuoi oggetti Weaviate
-      const r = searchJson.results ?? [];
-      setResults(Array.isArray(r) ? r : []);
+      const results = searchJson.results ?? [];
 
-      // 3) PUSH al modello: costruisci riassunto e chiama il tool MCP
-      // Solo se abbiamo risultati
-      if (r && Array.isArray(r) && r.length > 0) {
+      // 3) aggiorna la UI
+      setResults(Array.isArray(results) ? results : []);
+
+      // 4) push al modello (QUI torna in chat)
+      if (results && Array.isArray(results) && results.length > 0) {
         try {
-          // Costruisci un piccolo riassunto testuale per il modello
-          const top3 = r.slice(0, 3);
-        const summaryLines = top3.map((res: SearchResult, idx: number) => {
-          const props = res.properties || {};
-          const name = props.name || `risultato ${idx + 1}`;
-          const source = props.source_pdf || "sorgente sconosciuta";
-          const page = props.page_index ?? "?";
-          return `- ${name} (source: ${source}, page: ${page})`;
-        });
-
-        const resultsSummary = [
-          `Il widget Sinde ha trovato ${r.length} risultati.`,
-          `Ecco i primi ${top3.length}:`,
-          ...summaryLines,
-        ].join("\n");
-
-        // Chiama il tool MCP per pushare il riassunto nel modello
-        // Usa l'API corretta: window.openai.callTool() direttamente
-        if ((window as any).openai?.callTool) {
-          try {
-            await (window as any).openai.callTool("sinde_widget_push_results", {
-              results_summary: resultsSummary,
-              raw_results: r, // opzionale, ma utile se vuoi dare più contesto
-            });
-            console.log("✅ Risultati inviati al modello tramite sinde_widget_push_results");
-            setStatus(`Ricerca completata. ${r.length} risultati trovati e inviati a ChatGPT.`);
-          } catch (toolErr: any) {
-            console.error("❌ Errore chiamando sinde_widget_push_results:", toolErr);
-            setStatus(`Ricerca completata. ${r.length} risultati trovati (errore invio a ChatGPT: ${toolErr.message})`);
-          }
-        } else {
-          console.warn("⚠️ window.openai.callTool non disponibile (probabilmente in dev locale o API non supportata)");
-          setStatus(`Ricerca completata. ${r.length} risultati trovati (non inviati a ChatGPT - API non disponibile)`);
-        }
-        } catch (err: any) {
-          console.error("Errore chiamando sinde_widget_push_results:", err);
+          await pushResultsToModel(results, { imageId });
+          setStatus(`Ricerca completata. ${results.length} risultati trovati e inviati a ChatGPT.`);
+        } catch (pushErr: any) {
           // Non bloccare l'UI se la chiamata al tool fallisce
-          // Imposta comunque uno status per informare l'utente
-          setStatus(`Ricerca completata. ${r.length} risultati trovati (errore durante l'invio a ChatGPT)`);
+          console.error("Errore durante push risultati:", pushErr);
+          setStatus(`Ricerca completata. ${results.length} risultati trovati (errore invio a ChatGPT: ${pushErr.message || "errore sconosciuto"})`);
         }
       } else {
-        // Nessun risultato trovato
         setStatus("Ricerca completata. Nessun risultato trovato.");
       }
     } catch (err: any) {

@@ -484,32 +484,61 @@ def open_image_search_widget() -> Dict[str, Any]:
     Il widget si aprirà nell'interfaccia di ChatGPT e potrai usarlo direttamente.
     Il widget caricherà automaticamente l'immagine e chiamerà image_search_vertex tramite window.openai.callTool.
     """
-    # Restituisce la risposta del widget con i metadata espliciti
+    # Restituisce la risposta del widget
+    # build_widget_tool_response dovrebbe già gestire i metadata correttamente
     widget_response = image_search_widget()
     
-    # Aggiungi esplicitamente i metadata necessari per OpenAI Apps SDK
-    # Questi metadata devono essere nella risposta del tool, non solo nel tool stesso
+    # Debug: stampa la struttura completa della risposta
+    print(f"[widget] Full widget response structure: {json.dumps(widget_response, indent=2, default=str)}")
+    
+    # build_widget_tool_response dovrebbe già includere i metadata necessari
+    # ma verifichiamo se sono presenti e nel formato corretto
     if isinstance(widget_response, dict):
-        # Assicurati che ci siano i metadata
-        if "_meta" not in widget_response:
+        # I metadata potrebbero essere già nella risposta da build_widget_tool_response
+        # oppure potrebbero dover essere aggiunti in un formato specifico
+        
+        # Verifica se ci sono già metadata
+        has_meta = "_meta" in widget_response
+        has_content = "content" in widget_response
+        has_structured = "structuredContent" in widget_response
+        
+        print(f"[widget] Response structure - has _meta: {has_meta}, has content: {has_content}, has structuredContent: {has_structured}")
+        
+        # Se build_widget_tool_response non ha aggiunto i metadata, aggiungili
+        # Ma potrebbe essere che debbano essere nella struttura content, non in _meta
+        if not has_meta:
             widget_response["_meta"] = {}
         
-        # Aggiungi i metadata OpenAI necessari per il rendering del widget
-        widget_response["_meta"].update({
-            "openai/outputTemplate": "ui://widget/image-search.html",
-        })
+        # Aggiungi i metadata OpenAI necessari
+        widget_response["_meta"]["openai/outputTemplate"] = "ui://widget/image-search.html"
         
-        # Aggiungi anche nella struttura principale se necessario
-        # Alcune versioni di Apps SDK potrebbero cercare i metadata qui
-        if "content" not in widget_response:
-            widget_response["content"] = []
-        
-        print(f"[widget] Returning widget response with metadata: {widget_response.get('_meta', {})}")
+        print(f"[widget] Final metadata: {widget_response.get('_meta', {})}")
     
     return widget_response
 
 # Aggiungi metadata dopo la definizione del tool (per compatibilità)
 _add_widget_metadata_to_tool()
+
+# Prova ad aggiungere metadata direttamente al tool registrato in FastMCP
+# Questo potrebbe essere necessario perché i metadata devono essere nella definizione del tool
+try:
+    # FastMCP potrebbe memorizzare i tool in un attributo specifico
+    # Prova ad accedere ai tool registrati e aggiungere i metadata
+    if hasattr(mcp, '_tools') or hasattr(mcp, 'tools'):
+        tools_dict = getattr(mcp, '_tools', None) or getattr(mcp, 'tools', None)
+        if isinstance(tools_dict, dict) and 'open_image_search_widget' in tools_dict:
+            tool_info = tools_dict['open_image_search_widget']
+            if isinstance(tool_info, dict):
+                if '_meta' not in tool_info:
+                    tool_info['_meta'] = {}
+                tool_info['_meta'].update({
+                    "openai/outputTemplate": "ui://widget/image-search.html",
+                    "openai/toolInvocation/invoking": "Aprendo il widget di ricerca immagini...",
+                    "openai/toolInvocation/invoked": "Widget di ricerca immagini aperto.",
+                })
+                print("[widget] Added metadata to tool definition in FastMCP")
+except Exception as e:
+    print(f"[widget] Warning: Could not add metadata to tool definition: {e}")
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(_request):

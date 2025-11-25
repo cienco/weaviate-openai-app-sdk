@@ -1284,7 +1284,8 @@ def _refresh_vertex_oauth_loop():
             print(f"[vertex-oauth] 🔄 Vertex token refreshed (prefix: {token_preview}...)")
             sleep_s = 55 * 60
             if creds.expiry:
-                now = datetime.datetime.utcnow().replace(tzinfo=creds.expiry.tzinfo)
+                from datetime import timezone
+                now = datetime.datetime.now(timezone.utc).replace(tzinfo=creds.expiry.tzinfo)
                 delta = (creds.expiry - now).total_seconds() - 300
                 if delta > 300:
                     sleep_s = int(delta)
@@ -1353,42 +1354,40 @@ if __name__ == "__main__":
         raw_path = "/" + raw_path
     path = raw_path.rstrip("/") or "/"
 
-    # Prova prima il transport streamable-http con host/port/path
+    # Prova prima a usare uvicorn direttamente (più affidabile per Render)
     try:
-        sig = inspect.signature(mcp.run)
-        params = sig.parameters
-
-        kwargs = {"transport": "streamable-http"}
-        if "host" in params:
-            kwargs["host"] = host
-        if "port" in params:
-            kwargs["port"] = port
-        if "path" in params:
-            kwargs["path"] = path
-
-        print(f"[mcp] starting streamable-http server with kwargs: {kwargs}")
-        mcp.run(**kwargs)
-
-    except (TypeError, ValueError) as e:
-        # Se questa versione di FastMCP non supporta host/port/path,
-        # fai fallback su streamable-http e prova a pilotarla via env
-        print(f"[mcp] streamable-http run() with host/port/path failed: {e}")
-        os.environ.setdefault("FASTMCP_HOST", host)
-        os.environ.setdefault("FASTMCP_PORT", str(port))
-        print("[mcp] falling back to streamable-http on 0.0.0.0:$PORT")
+        import uvicorn
+        app = getattr(mcp, "app", None) or getattr(mcp, "_app", None)
+        if app:
+            print(f"[mcp] starting server with uvicorn on {host}:{port}")
+            uvicorn.run(app, host=host, port=port, log_level="info")
+        else:
+            raise RuntimeError("Cannot find FastMCP app")
+    except ImportError:
+        # Se uvicorn non è disponibile, prova mcp.run() con streamable-http
+        print("[mcp] uvicorn not available, trying mcp.run() with streamable-http")
         try:
+            sig = inspect.signature(mcp.run)
+            params = sig.parameters
+
+            kwargs = {"transport": "streamable-http"}
+            if "host" in params:
+                kwargs["host"] = host
+            if "port" in params:
+                kwargs["port"] = port
+            if "path" in params:
+                kwargs["path"] = path
+
+            print(f"[mcp] starting streamable-http server with kwargs: {kwargs}")
+            mcp.run(**kwargs)
+        except (TypeError, ValueError) as e:
+            # Se questa versione di FastMCP non supporta host/port/path,
+            # fai fallback su streamable-http e prova a pilotarla via env
+            print(f"[mcp] streamable-http run() with host/port/path failed: {e}")
+            os.environ.setdefault("FASTMCP_HOST", host)
+            os.environ.setdefault("FASTMCP_PORT", str(port))
+            print("[mcp] falling back to streamable-http on 0.0.0.0:$PORT")
             mcp.run(transport="streamable-http")
-        except Exception as e2:
-            # Fallback finale: usa uvicorn direttamente
-            print(f"[mcp] streamable-http also failed: {e2}")
-            try:
-                import uvicorn
-                app = getattr(mcp, "app", None) or getattr(mcp, "_app", None)
-                if app:
-                    print(f"[mcp] using uvicorn fallback on {host}:{port}")
-                    uvicorn.run(app, host=host, port=port, log_level="info")
-                else:
-                    raise RuntimeError("Cannot find FastMCP app")
-            except ImportError:
-                raise RuntimeError(f"Cannot start server: {e2}")
+    except Exception as e:
+        raise RuntimeError(f"Cannot start server: {e}")
 

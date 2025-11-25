@@ -9,15 +9,27 @@ from typing import Any, Dict, List, Optional
 # Monkey-patch uvicorn.run() PRIMA che FastMCP lo importi
 # Questo forza host=0.0.0.0 e port=PORT per Render
 def _patch_uvicorn_for_render():
-    """Patch uvicorn.run() per forzare host e port corretti su Render."""
+    """Patch uvicorn.run() e uvicorn.Server per forzare host e port corretti su Render."""
     try:
         import uvicorn
         # Leggi PORT dall'environment (Render la imposta automaticamente)
         render_port = int(os.environ.get("PORT", "10000"))
         render_host = "0.0.0.0"
         
-        # Salva la funzione originale
+        # Salva le funzioni originali
         original_run = uvicorn.run
+        original_server_init = None
+        original_config_init = None
+        
+        try:
+            original_server_init = uvicorn.Server.__init__
+        except:
+            pass
+        
+        try:
+            original_config_init = uvicorn.Config.__init__
+        except:
+            pass
         
         def patched_run(*args, **kwargs):
             # FORZA host e port per Render, intercettando qualsiasi chiamata
@@ -39,7 +51,38 @@ def _patch_uvicorn_for_render():
             print(f"[mcp] FORCING host={render_host}, port={render_port}")
             return original_run(app, host=render_host, port=render_port, **kwargs)
         
-        # Applica il patch
+        def patched_server_init(self, config=None, **kwargs):
+            """Patch uvicorn.Server.__init__ per forzare host e port."""
+            print(f"[mcp] patched uvicorn.Server.__init__ intercepted")
+            if config is not None:
+                # Se config è un oggetto Config, forza host e port
+                if hasattr(config, 'host'):
+                    print(f"[mcp] Server config original host={config.host}, port={config.port}")
+                    config.host = render_host
+                    config.port = render_port
+                    print(f"[mcp] Server config FORCED host={render_host}, port={render_port}")
+                # Se config è un dict, forza host e port
+                elif isinstance(config, dict):
+                    config['host'] = render_host
+                    config['port'] = render_port
+                    print(f"[mcp] Server config dict FORCED host={render_host}, port={render_port}")
+            # Forza anche nei kwargs
+            kwargs['host'] = render_host
+            kwargs['port'] = render_port
+            print(f"[mcp] Server init FORCING host={render_host}, port={render_port}")
+            if original_server_init:
+                return original_server_init(self, config, **kwargs)
+        
+        def patched_config_init(self, app, **kwargs):
+            """Patch uvicorn.Config.__init__ per forzare host e port."""
+            print(f"[mcp] patched uvicorn.Config.__init__ intercepted")
+            kwargs['host'] = render_host
+            kwargs['port'] = render_port
+            print(f"[mcp] Config init FORCING host={render_host}, port={render_port}")
+            if original_config_init:
+                return original_config_init(self, app, **kwargs)
+        
+        # Applica i patch
         uvicorn.run = patched_run
         
         # Patch anche se FastMCP fa "from uvicorn import run"
@@ -49,7 +92,17 @@ def _patch_uvicorn_for_render():
         except:
             pass
         
-        print(f"[mcp] uvicorn.run() patched early for Render (host={render_host}, port={render_port})")
+        # Patch uvicorn.Server se disponibile
+        if original_server_init:
+            uvicorn.Server.__init__ = patched_server_init
+            print(f"[mcp] uvicorn.Server.__init__ patched")
+        
+        # Patch uvicorn.Config se disponibile
+        if original_config_init:
+            uvicorn.Config.__init__ = patched_config_init
+            print(f"[mcp] uvicorn.Config.__init__ patched")
+        
+        print(f"[mcp] uvicorn patched early for Render (host={render_host}, port={render_port})")
     except ImportError:
         # uvicorn non è ancora disponibile, verrà patchato dopo
         pass
@@ -1390,6 +1443,47 @@ try:
         )
 except Exception as _route_err:
     print("[mcp] warning: cannot register MCP alias route:", _route_err)
+
+# ==== Esponi l'app ASGI per uvicorn (per uso diretto nello start command) ====
+# Puoi usare: uvicorn serve:app --host 0.0.0.0 --port $PORT
+def _get_fastmcp_app():
+    """Ottiene l'app ASGI Starlette da FastMCP per uso con uvicorn diretto."""
+    from starlette.applications import Starlette
+    
+    # Prova vari modi per ottenere l'app
+    app = None
+    
+    # Metodo 1: attributi diretti
+    for attr_name in ["app", "_app", "asgi_app", "_asgi_app"]:
+        app = getattr(mcp, attr_name, None)
+        if app and isinstance(app, Starlette):
+            print(f"[mcp] found app via mcp.{attr_name}")
+            return app
+    
+    # Metodo 2: tramite _server se disponibile
+    server = getattr(mcp, "_server", None)
+    if server:
+        for attr_name in ["app", "_app", "asgi_app", "_asgi_app"]:
+            app = getattr(server, attr_name, None)
+            if app and isinstance(app, Starlette):
+                print(f"[mcp] found app via mcp._server.{attr_name}")
+                return app
+    
+    # Metodo 3: tramite _transport se disponibile
+    transport = getattr(mcp, "_transport", None)
+    if transport:
+        for attr_name in ["app", "_app", "asgi_app", "_asgi_app"]:
+            app = getattr(transport, attr_name, None)
+            if app and isinstance(app, Starlette):
+                print(f"[mcp] found app via mcp._transport.{attr_name}")
+                return app
+    
+    # Se non troviamo l'app, restituisci None
+    # L'app verrà inizializzata quando mcp.run() viene chiamato
+    return None
+
+# Esponi l'app come variabile di modulo (None se non disponibile)
+app = _get_fastmcp_app()
 
 # ==== main: avvia il server MCP in modalità streamable-http ==================
 if __name__ == "__main__":

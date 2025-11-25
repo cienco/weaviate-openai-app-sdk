@@ -4,9 +4,19 @@ Server MCP HTTP (Streamable HTTP) per collegare **Weaviate Cloud** a client MCP 
 
 ## Deploy rapido su Render
 
-1. Crea un nuovo **Web Service** su Render da questo repo/cartella.
-2. (Con `Dockerfile`) Render userà il container già pronto.
-3. Imposta le variabili d'ambiente:
+1. **Builda l'app React localmente** (vedi [BUILD.md](BUILD.md)):
+   ```bash
+   cd weaviate-image-app
+   npm install
+   npm run build
+   git add weaviate-image-app/dist/
+   git commit -m "Add built React app"
+   git push
+   ```
+
+2. Crea un nuovo **Web Service** su Render da questo repo/cartella.
+3. Render userà automaticamente Python (non Docker).
+4. Imposta le variabili d'ambiente:
    - `WEAVIATE_URL` (oppure `WEAVIATE_CLUSTER_URL`) - **Obbligatorio**
    - `WEAVIATE_API_KEY` - **Obbligatorio**
    - (opz) `MCP_PATH` (default `/mcp/`)

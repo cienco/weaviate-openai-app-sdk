@@ -105,20 +105,22 @@ export const ImageSearchWidget: React.FC = () => {
         ].join("\n");
 
         // Chiama il tool MCP per pushare il riassunto nel modello
-        // @ts-ignore
-        const client = await (window as any).openai?.createClient();
-        
-        if (client) {
-          await client.tools.call({
-            name: "sinde_widget_push_results",
-            arguments: {
+        // Usa l'API corretta: window.openai.callTool() direttamente
+        if ((window as any).openai?.callTool) {
+          try {
+            await (window as any).openai.callTool("sinde_widget_push_results", {
               results_summary: resultsSummary,
               raw_results: r, // opzionale, ma utile se vuoi dare più contesto
-            },
-          });
-          console.log("Risultati inviati al modello tramite sinde_widget_push_results");
+            });
+            console.log("✅ Risultati inviati al modello tramite sinde_widget_push_results");
+            setStatus(`Ricerca completata. ${r.length} risultati trovati e inviati a ChatGPT.`);
+          } catch (toolErr: any) {
+            console.error("❌ Errore chiamando sinde_widget_push_results:", toolErr);
+            setStatus(`Ricerca completata. ${r.length} risultati trovati (errore invio a ChatGPT: ${toolErr.message})`);
+          }
         } else {
-          console.warn("window.openai.createClient non disponibile (probabilmente in dev locale)");
+          console.warn("⚠️ window.openai.callTool non disponibile (probabilmente in dev locale o API non supportata)");
+          setStatus(`Ricerca completata. ${r.length} risultati trovati (non inviati a ChatGPT - API non disponibile)`);
         }
       } catch (err: any) {
         console.error("Errore chiamando sinde_widget_push_results:", err);

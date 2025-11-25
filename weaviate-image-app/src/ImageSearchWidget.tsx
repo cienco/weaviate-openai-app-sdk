@@ -84,12 +84,13 @@ export const ImageSearchWidget: React.FC = () => {
       // searchJson.results contiene i tuoi oggetti Weaviate
       const r = searchJson.results ?? [];
       setResults(Array.isArray(r) ? r : []);
-      setStatus("Ricerca completata.");
 
       // 3) PUSH al modello: costruisci riassunto e chiama il tool MCP
-      try {
-        // Costruisci un piccolo riassunto testuale per il modello
-        const top3 = r.slice(0, 3);
+      // Solo se abbiamo risultati
+      if (r && Array.isArray(r) && r.length > 0) {
+        try {
+          // Costruisci un piccolo riassunto testuale per il modello
+          const top3 = r.slice(0, 3);
         const summaryLines = top3.map((res: SearchResult, idx: number) => {
           const props = res.properties || {};
           const name = props.name || `risultato ${idx + 1}`;
@@ -122,9 +123,15 @@ export const ImageSearchWidget: React.FC = () => {
           console.warn("⚠️ window.openai.callTool non disponibile (probabilmente in dev locale o API non supportata)");
           setStatus(`Ricerca completata. ${r.length} risultati trovati (non inviati a ChatGPT - API non disponibile)`);
         }
-      } catch (err: any) {
-        console.error("Errore chiamando sinde_widget_push_results:", err);
-        // Non bloccare l'UI se la chiamata al tool fallisce
+        } catch (err: any) {
+          console.error("Errore chiamando sinde_widget_push_results:", err);
+          // Non bloccare l'UI se la chiamata al tool fallisce
+          // Imposta comunque uno status per informare l'utente
+          setStatus(`Ricerca completata. ${r.length} risultati trovati (errore durante l'invio a ChatGPT)`);
+        }
+      } else {
+        // Nessun risultato trovato
+        setStatus("Ricerca completata. Nessun risultato trovato.");
       }
     } catch (err: any) {
       console.error(err);

@@ -470,17 +470,39 @@ def _load_widget_html() -> str:
         with open(widget_html_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        html_content = html_content.replace(
-            'src="/assets/', f'src="{_BASE_URL}/assets/'
+        # Vite genera path come /assets/index-xxx.js (con base: '/assets/')
+        # Dobbiamo sostituire /assets/ con {_BASE_URL}/assets/ senza creare doppio assets
+        import re
+        
+        # Prima rimuovi eventuali doppi assets (correzione per path già modificati)
+        base_url_escaped = _BASE_URL.replace('/', r'\/')
+        html_content = re.sub(
+            rf'{base_url_escaped}/assets/assets/',
+            rf'{_BASE_URL}/assets/',
+            html_content
         )
-        html_content = html_content.replace(
-            'href="/assets/', f'href="{_BASE_URL}/assets/'
+        
+        # Sostituisce src="/assets/..." con src="{_BASE_URL}/assets/..."
+        html_content = re.sub(
+            r'src="/assets/([^"]+)"',
+            rf'src="{_BASE_URL}/assets/\1"',
+            html_content
         )
-        html_content = html_content.replace(
-            'src="assets/', f'src="{_BASE_URL}/assets/'
+        html_content = re.sub(
+            r'href="/assets/([^"]+)"',
+            rf'href="{_BASE_URL}/assets/\1"',
+            html_content
         )
-        html_content = html_content.replace(
-            'href="assets/', f'href="{_BASE_URL}/assets/'
+        # Gestisce anche path relativi assets/... (senza slash iniziale)
+        html_content = re.sub(
+            r'src="assets/([^"]+)"',
+            rf'src="{_BASE_URL}/assets/\1"',
+            html_content
+        )
+        html_content = re.sub(
+            r'href="assets/([^"]+)"',
+            rf'href="{_BASE_URL}/assets/\1"',
+            html_content
         )
 
         return html_content
@@ -665,6 +687,10 @@ async def serve_assets(request):
     from starlette.responses import FileResponse
 
     file_path = request.path_params.get("file_path", "")
+    
+    # Rimuovi eventuale prefisso "assets/" duplicato
+    if file_path.startswith("assets/"):
+        file_path = file_path[7:]  # Rimuovi "assets/"
 
     full_path = _WIDGET_DIST_DIR / "assets" / file_path
     if not full_path.exists():

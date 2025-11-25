@@ -426,7 +426,7 @@ os.environ.setdefault("FASTMCP_PORT", str(SERVER_PORT))
 os.environ.setdefault("FASTMCP_HOST", "0.0.0.0")
 
 # Non passiamo host/port direttamente, lasciamo che FastMCP usi le env FASTMCP_*
-mcp = FastMCP(_MCP_SERVER_NAME)
+mcp = FastMCP(_MCP_SERVER_NAME, stateless_http=True)
 
 
 def _apply_mcp_metadata():
@@ -1447,7 +1447,23 @@ except Exception as _route_err:
 # ==== Esponi l'app ASGI per uvicorn (per uso diretto nello start command) ====
 # Puoi usare: uvicorn serve:app --host 0.0.0.0 --port $PORT
 # Come nell'esempio Pizzaz, usiamo semplicemente mcp.streamable_http_app()
-app = mcp.streamable_http_app()
+try:
+    app = mcp.streamable_http_app()
+    if app is None:
+        raise ValueError("streamable_http_app() returned None")
+    print("[mcp] app obtained via streamable_http_app()")
+except Exception as e:
+    print(f"[mcp] error getting app via streamable_http_app(): {e}")
+    # Fallback: prova a ottenere l'app in altri modi
+    from starlette.applications import Starlette
+    app = None
+    for attr_name in ["app", "_app", "asgi_app", "_asgi_app"]:
+        app = getattr(mcp, attr_name, None)
+        if app and isinstance(app, Starlette):
+            print(f"[mcp] found app via mcp.{attr_name} (fallback)")
+            break
+    if app is None:
+        raise RuntimeError("Cannot get FastMCP app - streamable_http_app() failed and no app found")
 
 # Aggiungi CORS middleware se disponibile (opzionale)
 try:

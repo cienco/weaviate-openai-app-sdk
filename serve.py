@@ -320,20 +320,22 @@ mcp = FastMCP(_MCP_SERVER_NAME)
 # I widget decorati verranno registrati dopo che sono stati definiti
 
 def _apply_mcp_metadata():
+    """Applica metadata al server MCP se supportato."""
     try:
-        info = getattr(mcp, "server_info", None)
-        if isinstance(info, dict):
+        # mcp.server.fastmcp potrebbe avere un metodo diverso per impostare metadata
+        # Prova a usare set_server_info se disponibile
+        if hasattr(mcp, 'set_server_info'):
+            server_info = {}
             if _MCP_DESCRIPTION:
-                info["description"] = _MCP_DESCRIPTION
+                server_info["description"] = _MCP_DESCRIPTION
             if _MCP_INSTRUCTIONS:
-                info["instructions"] = _MCP_INSTRUCTIONS
-        elif _MCP_DESCRIPTION or _MCP_INSTRUCTIONS:
-            if _MCP_DESCRIPTION:
-                setattr(mcp, "description", _MCP_DESCRIPTION)
-            if _MCP_INSTRUCTIONS:
-                setattr(mcp, "instructions", _MCP_INSTRUCTIONS)
+                server_info["instructions"] = _MCP_INSTRUCTIONS
+            if server_info:
+                mcp.set_server_info(**server_info)
+        # Altrimenti ignora - i metadata non sono critici
     except Exception as _info_err:
-        print("[mcp] warning: cannot set server info metadata:", _info_err)
+        # Ignora silenziosamente - i metadata non sono critici per il funzionamento
+        pass
 
 
 _apply_mcp_metadata()
@@ -429,14 +431,8 @@ def image_search_widget_resource():
 
 # Step 2 - Describe tools (come nella guida ufficiale)
 # Il tool deve avere _meta["openai/outputTemplate"] nella definizione
-# mcp.server.fastmcp supporta i metadata tramite il parametro _meta nel decorator
-@mcp.tool(
-    _meta={
-        "openai/outputTemplate": widget_uri,
-        "openai/toolInvocation/invoking": "Aprendo il widget di ricerca immagini...",
-        "openai/toolInvocation/invoked": "Widget di ricerca immagini pronto.",
-    }
-)
+# mcp.server.fastmcp non supporta _meta come parametro, lo aggiungiamo dopo
+@mcp.tool
 def open_image_search_widget() -> Dict[str, Any]:
     """
     Apre il widget interattivo per la ricerca di immagini.
@@ -466,6 +462,60 @@ def open_image_search_widget() -> Dict[str, Any]:
             "baseUrl": _BASE_URL,
         },
     }
+
+# Aggiungi i metadata alla definizione del tool dopo la registrazione
+# mcp.server.fastmcp richiede che i metadata siano aggiunti dopo la registrazione
+def _add_tool_metadata():
+    """Aggiunge metadata openai/outputTemplate alla definizione del tool."""
+    try:
+        # mcp.server.fastmcp potrebbe memorizzare i tool in modo diverso
+        # Prova ad accedere ai tool registrati
+        if hasattr(mcp, '_tools'):
+            tools = mcp._tools
+        elif hasattr(mcp, 'tools'):
+            tools = mcp.tools
+        else:
+            # Prova ad accedere tramite l'app Starlette
+            app = getattr(mcp, 'app', None) or getattr(mcp, '_app', None)
+            if app and hasattr(app, 'state') and hasattr(app.state, 'tools'):
+                tools = app.state.tools
+            else:
+                return
+        
+        # Aggiungi i metadata al tool
+        tool_name = 'open_image_search_widget'
+        if isinstance(tools, dict) and tool_name in tools:
+            tool_def = tools[tool_name]
+            # Aggiungi _meta se non esiste
+            if not hasattr(tool_def, '_meta'):
+                tool_def._meta = {}
+            elif not isinstance(tool_def._meta, dict):
+                tool_def._meta = {}
+            
+            tool_def._meta.update({
+                "openai/outputTemplate": widget_uri,
+                "openai/toolInvocation/invoking": "Aprendo il widget di ricerca immagini...",
+                "openai/toolInvocation/invoked": "Widget di ricerca immagini pronto.",
+            })
+        elif isinstance(tools, list):
+            # Se tools è una lista, cerca il tool per nome
+            for tool_def in tools:
+                if hasattr(tool_def, 'name') and tool_def.name == tool_name:
+                    if not hasattr(tool_def, '_meta'):
+                        tool_def._meta = {}
+                    tool_def._meta.update({
+                        "openai/outputTemplate": widget_uri,
+                        "openai/toolInvocation/invoking": "Aprendo il widget di ricerca immagini...",
+                        "openai/toolInvocation/invoked": "Widget di ricerca immagini pronto.",
+                    })
+                    break
+    except Exception as e:
+        # Se non riusciamo ad aggiungere i metadata, il tool funzionerà comunque
+        # ma il widget potrebbe non apparire
+        print(f"[widget] Warning: Could not add metadata to tool: {e}")
+
+# Chiama dopo che il tool è stato registrato
+_add_tool_metadata()
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(_request):

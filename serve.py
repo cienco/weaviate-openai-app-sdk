@@ -302,6 +302,19 @@ def _load_text_source(env_keys, file_path):
 
 
 _MCP_SERVER_NAME = os.environ.get("MCP_SERVER_NAME", "weaviate-mcp-http")
+_MCP_INSTRUCTIONS_FILE = os.environ.get("MCP_PROMPT_FILE") or os.environ.get(
+    "MCP_INSTRUCTIONS_FILE"
+)
+if not _MCP_INSTRUCTIONS_FILE and _DEFAULT_PROMPT_PATH.exists():
+    _MCP_INSTRUCTIONS_FILE = str(_DEFAULT_PROMPT_PATH)
+_MCP_DESCRIPTION_FILE = os.environ.get("MCP_DESCRIPTION_FILE")
+if not _MCP_DESCRIPTION_FILE and _DEFAULT_DESCRIPTION_PATH.exists():
+    _MCP_DESCRIPTION_FILE = str(_DEFAULT_DESCRIPTION_PATH)
+
+_MCP_INSTRUCTIONS = _load_text_source(
+    ["MCP_PROMPT", "MCP_INSTRUCTIONS"], _MCP_INSTRUCTIONS_FILE
+)
+_MCP_DESCRIPTION = _load_text_source("MCP_DESCRIPTION", _MCP_DESCRIPTION_FILE)
 
 # Porta e host per FastMCP / uvicorn (per Render)
 SERVER_PORT = int(os.environ.get("PORT", "10000"))
@@ -310,6 +323,7 @@ os.environ.setdefault("FASTMCP_HOST", "0.0.0.0")
 
 # Non passiamo host/port direttamente, lasciamo che FastMCP usi le env FASTMCP_*
 mcp = FastMCP(_MCP_SERVER_NAME)
+
 
 def _apply_mcp_metadata():
     try:

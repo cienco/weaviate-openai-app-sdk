@@ -442,9 +442,16 @@ def _register_widget_resource():
     try:
         # Carica il widget HTML
         widget_html = _load_widget_html()
+        print(f"[widget] 📄 Widget HTML loaded, length: {len(widget_html)} chars")
+        
+        # Verifica se il widget HTML contiene il div root
+        if '<div id="root">' not in widget_html:
+            print("[widget] ⚠️ WARNING: Widget HTML might not contain <div id='root'>")
         
         # Registra la risorsa widget manualmente
         # FastMCP potrebbe supportare la registrazione tramite attributi o metodi
+        registered = False
+        
         if hasattr(mcp, 'register_resource') or hasattr(mcp, 'add_resource'):
             register_func = getattr(mcp, 'register_resource', None) or getattr(mcp, 'add_resource', None)
             if register_func:
@@ -455,7 +462,9 @@ def _register_widget_resource():
                     mimeType="text/html+skybridge",
                 )
                 print("[widget] ✅ Widget resource registered manually via register_resource")
-        elif hasattr(mcp, '_resources'):
+                registered = True
+        
+        if not registered and hasattr(mcp, '_resources'):
             # Prova ad aggiungere direttamente alle risorse
             resources = getattr(mcp, '_resources', {})
             if isinstance(resources, dict):
@@ -471,8 +480,12 @@ def _register_widget_resource():
                     }]
                 }
                 print("[widget] ✅ Widget resource added to _resources")
-        else:
+                registered = True
+                print(f"[widget] 📋 Resources dict now has {len(resources)} resources")
+        
+        if not registered:
             print("[widget] ⚠️ Cannot find method to register resource manually, using register_decorated_widgets")
+            print(f"[widget] 🔍 MCP object attributes: {[attr for attr in dir(mcp) if not attr.startswith('__')]}")
     except Exception as e:
         print(f"[widget] ❌ Error registering widget resource manually: {e}")
         import traceback
@@ -505,6 +518,7 @@ def _add_widget_metadata_to_tool():
 
 # Definisci il tool con metadata nella definizione (come nella guida ufficiale)
 # I metadata devono essere nella definizione del tool, non solo nella risposta
+# Seguiamo esattamente la guida ufficiale OpenAI Apps SDK
 @mcp.tool
 def open_image_search_widget() -> Dict[str, Any]:
     """
@@ -518,9 +532,28 @@ def open_image_search_widget() -> Dict[str, Any]:
     Il widget si aprirà nell'interfaccia di ChatGPT e potrai usarlo direttamente.
     Il widget caricherà automaticamente l'immagine e chiamerà image_search_vertex tramite window.openai.callTool.
     """
-    # Restituisce la risposta del widget
-    # build_widget_tool_response dovrebbe già gestire i metadata
-    return image_search_widget()
+    # Restituisce la risposta seguendo esattamente il formato della guida ufficiale
+    # La risposta deve includere content, structuredContent E i metadata
+    widget_response = image_search_widget()
+    
+    # Aggiungi i metadata nella risposta (come nella guida ufficiale)
+    # I metadata devono essere nella struttura principale della risposta
+    if isinstance(widget_response, dict):
+        # Assicurati che ci siano content e structuredContent
+        if "content" not in widget_response:
+            widget_response["content"] = []
+        if "structuredContent" not in widget_response:
+            widget_response["structuredContent"] = {}
+        
+        # Aggiungi i metadata nella struttura principale
+        # Dalla guida ufficiale, i metadata devono essere qui
+        widget_response["_meta"] = {
+            "openai/outputTemplate": "ui://widget/image-search.html",
+        }
+        
+        print(f"[widget] ✅ Response with metadata: {json.dumps(widget_response, indent=2, default=str)}")
+    
+    return widget_response
 
 # Aggiungi metadata dopo la definizione del tool (per compatibilità)
 _add_widget_metadata_to_tool()

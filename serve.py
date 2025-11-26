@@ -546,10 +546,10 @@ widget_uri = "ui://widget/image-search.html"
 
 SINDE_WIDGET = SindeWidget(
     identifier="open_image_search_widget",          # nome del tool
-    title="Sinde Image Search",                     # come vuoi vederlo in ChatGPT
+    title="Ricerca progetti Sinde",                 # come vuoi vederlo in ChatGPT
     template_uri=widget_uri,
-    invoking="Apro il widget di ricerca immagini Sinde...",
-    invoked="Widget di ricerca immagini Sinde pronto.",
+    invoking="Apro il widget di ricerca progetti Sinde...",
+    invoked="Widget di ricerca progetti Sinde pronto.",
     html=_load_widget_html_cached(),                # HTML già buildato
     response_text="Ho aperto il widget di ricerca immagini Sinde.",
 )

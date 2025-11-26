@@ -1740,6 +1740,9 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
     name = req.params.name
     args = req.params.arguments or {}
 
+    # LOG DI DEBUG: vediamo quali tool vengono chiamati
+    print(f"[call_tool] name={name}, args={json.dumps(args, ensure_ascii=False)}")
+
     # 1) Tool del widget (UI)
     if name == SINDE_WIDGET.identifier:
         w = SINDE_WIDGET
@@ -1763,6 +1766,10 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
     # 2) Tool normali (quelli del registry)
     if name in TOOL_REGISTRY:
         fn = TOOL_REGISTRY[name]
+        
+        if name == "sinde_widget_push_results":
+            print("[call_tool] sinde_widget_push_results invoked from widget")
+        
         try:
             # Proviamo a passare gli argomenti così come sono
             result = fn(**args)

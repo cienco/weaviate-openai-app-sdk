@@ -10,52 +10,27 @@ type SearchResult = {
     name?: string;
     source_pdf?: string;
     page_index?: number;
+    mediaType?: string;
     [key: string]: any;
   };
   distance?: number;
 };
 
+// Declare global types per window.openai
+declare global {
+  interface Window {
+    openai: {
+      createClient: () => {
+        tools: {
+          call(args: { name: string; arguments?: any }): Promise<any>;
+        };
+      };
+    };
+  }
+}
+
 // 1) client SDK UNA VOLTA sola (inizializzato all'avvio)
-let client: any = null;
-try {
-  // @ts-ignore
-  if ((window as any).openai?.createClient) {
-    // @ts-ignore
-    client = (window as any).openai.createClient();
-  }
-} catch (e) {
-  console.warn("⚠️ window.openai.createClient non disponibile:", e);
-}
-
-// 2) funzione di utilità per pushare i risultati al modello
-async function pushResultsToModel(
-  results: SearchResult[],
-  extraInfo?: { query?: string; imageId?: string }
-) {
-  if (!client) {
-    console.warn("⚠️ Client OpenAI non disponibile, skip push risultati");
-    return;
-  }
-
-  const results_summary =
-    `Trovati ${results.length} risultati nella collection Sinde` +
-    (extraInfo?.query ? ` per la query "${extraInfo.query}"` : "") +
-    (extraInfo?.imageId ? ` (image_id=${extraInfo.imageId})` : "");
-
-  try {
-    await client.tools.call({
-      name: "sinde_widget_push_results", // deve combaciare con il nome MCP
-      arguments: {
-        results_summary,
-        raw_results: results,
-      },
-    });
-    console.log("✅ Risultati inviati al modello tramite sinde_widget_push_results");
-  } catch (err: any) {
-    console.error("❌ Errore chiamando sinde_widget_push_results:", err);
-    throw err; // Rilancia per gestione errori nel componente
-  }
-}
+const client = window.openai?.createClient();
 
 export const ImageSearchWidget: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -122,25 +97,50 @@ export const ImageSearchWidget: React.FC = () => {
       }
 
       const searchJson = await searchResp.json();
+      if (searchJson.error) {
+        throw new Error(searchJson.error || "Errore nella ricerca immagini");
+      }
 
-      // searchJson.results contiene i tuoi oggetti Weaviate
-      const results = searchJson.results ?? [];
-
-      // 3) aggiorna la UI
+      // 3) Mostra i risultati nella UI
+      const results = searchJson.results || [];
       setResults(Array.isArray(results) ? results : []);
 
-      // 4) push al modello (QUI torna in chat)
-      if (results && Array.isArray(results) && results.length > 0) {
+      // 4) PREPARA il riassunto da mandare al modello
+      const summaryParts = results.slice(0, 3).map((r: SearchResult, idx: number) => {
+        const props = r.properties || {};
+        const name = props.name || "(senza nome)";
+        const pdf = props.source_pdf || "(sorgente sconosciuta)";
+        const page = props.page_index ?? "?";
+        const mediaType = props.mediaType || "";
+        return `${idx + 1}. ${name} [${pdf} - pag. ${page}] ${mediaType}`;
+      });
+
+      const resultsSummary =
+        results.length === 0
+          ? "Nessun risultato trovato."
+          : `Ho trovato ${results.length} risultati simili. I primi sono:\n` +
+            summaryParts.join("\n");
+
+      // 5) CHIAMATA al tool sinde_widget_push_results
+      if (client) {
         try {
-          await pushResultsToModel(results, { imageId });
+          await client.tools.call({
+            name: "sinde_widget_push_results",
+            arguments: {
+              results_summary: resultsSummary,
+              raw_results: searchJson, // oppure results
+            },
+          });
+          console.log("✅ Risultati inviati al modello tramite sinde_widget_push_results");
           setStatus(`Ricerca completata. ${results.length} risultati trovati e inviati a ChatGPT.`);
-        } catch (pushErr: any) {
-          // Non bloccare l'UI se la chiamata al tool fallisce
-          console.error("Errore durante push risultati:", pushErr);
-          setStatus(`Ricerca completata. ${results.length} risultati trovati (errore invio a ChatGPT: ${pushErr.message || "errore sconosciuto"})`);
+        } catch (err: any) {
+          console.error("Errore chiamando sinde_widget_push_results:", err);
+          // NON bloccare la UI: al massimo mostri un warning
+          setStatus(`Ricerca completata. ${results.length} risultati trovati (errore invio a ChatGPT: ${err.message || "errore sconosciuto"})`);
         }
       } else {
-        setStatus("Ricerca completata. Nessun risultato trovato.");
+        console.warn("⚠️ Client OpenAI non disponibile, skip push risultati");
+        setStatus(`Ricerca completata. ${results.length} risultati trovati (non inviati a ChatGPT - API non disponibile)`);
       }
     } catch (err: any) {
       console.error(err);

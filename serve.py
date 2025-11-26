@@ -129,6 +129,9 @@ _VERTEX_USER_PROJECT: Optional[str] = None
 # In-memory storage per immagini caricate (temporaneo, scade dopo 1 ora)
 _UPLOADED_IMAGES: Dict[str, Dict[str, Any]] = {}
 
+# Ultimi risultati ricevuti dal widget Sinde (visibili ai tool MCP)
+_LAST_WIDGET_RESULTS: Dict[str, Any] = {}
+
 _BASE_DIR = Path(__file__).resolve().parent
 _DEFAULT_PROMPT_PATH = _BASE_DIR / "prompts" / "instructions.md"
 _DEFAULT_DESCRIPTION_PATH = _BASE_DIR / "prompts" / "description.txt"
@@ -862,6 +865,34 @@ async def image_search_http(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/widget-push-results", methods=["POST"])
+async def widget_push_results(request):
+    """
+    Endpoint HTTP chiamato SOLO dal widget per salvare gli ultimi risultati
+    di ricerca, in modo che un tool MCP possa poi restituirli a ChatGPT.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    summary = data.get("results_summary")
+    raw = data.get("raw_results")
+
+    if not summary:
+        return JSONResponse(
+            {"error": "results_summary is required"},
+            status_code=400,
+        )
+
+    # Salva in memoria globale
+    global _LAST_WIDGET_RESULTS
+    _LAST_WIDGET_RESULTS["summary"] = summary
+    _LAST_WIDGET_RESULTS["raw_results"] = raw
+
+    return JSONResponse({"ok": True})
+
+
 @mcp.tool()
 def get_instructions() -> Dict[str, Any]:
     return {
@@ -924,17 +955,25 @@ def debug_widget() -> Dict[str, Any]:
 
 @mcp.tool()
 def sinde_widget_push_results(
-    results_summary: str,
+    results_summary: Optional[str] = None,
     raw_results: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Tool usato SOLO dal widget Sinde per riportare i risultati al modello.
+    Tool MCP che restituisce gli ultimi risultati salvati dal widget.
 
-    - results_summary: stringa breve che descrive i risultati mostrati nella UI
-    - raw_results: (opzionale) struttura dati grezza (lista di risultati, ecc.)
-
-    Il contenuto viene messo in structuredContent, così il modello può ragionarci.
+    - Uso normale (ChatGPT che lo chiama): ignora gli argomenti e
+      restituisce quello che il widget ha mandato a /widget-push-results.
+    - Se per qualche motivo non c'è nulla in memoria, usa gli argomenti
+      passati (fallback, utile in test).
     """
+    # Se il widget ha già pushato qualcosa via /widget-push-results
+    if _LAST_WIDGET_RESULTS:
+        return {
+            "summary": _LAST_WIDGET_RESULTS.get("summary"),
+            "raw_results": _LAST_WIDGET_RESULTS.get("raw_results"),
+        }
+
+    # Fallback: usa gli argomenti (per compatibilità)
     return {
         "summary": results_summary,
         "raw_results": raw_results,
@@ -1663,7 +1702,7 @@ async def _list_tools() -> List[types.Tool]:
                         "description": "Risultati grezzi (lista di match, metadati, ecc.).",
                     },
                 },
-                "required": ["results_summary"],
+                "required": [],  # <<< nessun campo obbligatorio
                 "additionalProperties": False,
             }
 

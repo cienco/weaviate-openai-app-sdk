@@ -11,6 +11,7 @@ type SearchResult = {
     source_pdf?: string;
     page_index?: number;
     mediaType?: string;
+    image_b64?: string;
     [key: string]: any;
   };
   distance?: number;
@@ -328,6 +329,43 @@ export const ImageSearchWidget: React.FC = () => {
                 >
                   #{idx + 1}
                 </div>
+                
+                {/* Anteprima immagine da image_b64 */}
+                {r.properties?.image_b64 && (
+                  <div
+                    style={{
+                      marginBottom: "12px",
+                      borderRadius: "8px",
+                      overflow: "hidden",
+                      backgroundColor: "#f5f5f5",
+                      border: "1px solid #e0e0e0",
+                      minHeight: "150px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <img
+                      src={`data:image/png;base64,${r.properties.image_b64}`}
+                      alt={r.properties?.name || `Anteprima pagina ${r.properties?.page_index || ""}`}
+                      style={{
+                        width: "100%",
+                        height: "auto",
+                        display: "block",
+                        maxHeight: "200px",
+                        objectFit: "contain",
+                      }}
+                      onError={(e) => {
+                        // Se l'immagine fallisce, nascondi il container
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                          parent.style.display = "none";
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                
                 {r.properties?.name && (
                   <h3
                     style={{

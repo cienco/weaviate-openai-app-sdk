@@ -1214,7 +1214,7 @@ def hybrid_search(
                 "alpha": alpha,
                 "limit": limit,
                 "vector": vec,
-                "return_properties": ["name", "source_pdf", "page_index", "mediaType"],
+                "return_properties": ["name", "source_pdf", "page_index", "mediaType", "image_b64"],
                 "return_metadata": MetadataQuery(score=True, distance=True),
             }
             if query_properties:
@@ -1225,7 +1225,7 @@ def hybrid_search(
                 "query": query,
                 "alpha": alpha,
                 "limit": limit,
-                "return_properties": ["name", "source_pdf", "page_index", "mediaType"],
+                "return_properties": ["name", "source_pdf", "page_index", "mediaType", "image_b64"],
                 "return_metadata": MetadataQuery(score=True, distance=True),
             }
             if query_properties:
@@ -1497,7 +1497,7 @@ def image_search_vertex(
         resp = coll.query.near_image(
             image_b64,
             limit=limit,
-            return_properties=["name", "source_pdf", "page_index", "mediaType"],
+            return_properties=["name", "source_pdf", "page_index", "mediaType", "image_b64"],
             return_metadata=MetadataQuery(distance=True),
         )
         out = []

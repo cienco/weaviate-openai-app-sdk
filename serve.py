@@ -1901,21 +1901,91 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
     # 2) Tool normali (quelli del registry)
     if name in TOOL_REGISTRY:
         fn = TOOL_REGISTRY[name]
-        
+
         if name == "get_last_sinde_results":
             print("[call_tool] get_last_sinde_results invoked")
-        
+
+        # Caso speciale: hybrid_search → normalizziamo i parametri a mano
+        if name == "hybrid_search":
+            print("[call_tool] hybrid_search called with:", args)
+
+            collection = args.get("collection") or "Sinde"
+            query = args.get("query")
+
+            if not query:
+                # Niente eccezione Python: rispondiamo con errore MCP "gentile"
+                return types.ServerResult(
+                    types.CallToolResult(
+                        content=[
+                            types.TextContent(
+                                type="text",
+                                text="Errore: parametro obbligatorio 'query' mancante per hybrid_search.",
+                            )
+                        ],
+                        isError=True,
+                    )
+                )
+
+            limit = args.get("limit", 10)
+            alpha = args.get("alpha", 0.8)
+            query_properties = args.get("query_properties")
+            return_properties = args.get("return_properties")
+            image_id = args.get("image_id")
+            image_url = args.get("image_url")
+
+            try:
+                result = fn(
+                    collection=collection,
+                    query=query,
+                    limit=limit,
+                    alpha=alpha,
+                    query_properties=query_properties,
+                    return_properties=return_properties,
+                    image_id=image_id,
+                    image_url=image_url,
+                )
+                # Se la funzione fosse async (non lo è, ma per sicurezza)
+                if hasattr(result, "__await__"):
+                    result = await result
+            except Exception as e:
+                return types.ServerResult(
+                    types.CallToolResult(
+                        content=[
+                            types.TextContent(
+                                type="text",
+                                text=f"Errore chiamando hybrid_search: {e}",
+                            )
+                        ],
+                        isError=True,
+                    )
+                )
+
+            return types.ServerResult(
+                types.CallToolResult(
+                    content=[
+                        types.TextContent(
+                            type="text",
+                            text="Risultato del tool hybrid_search disponibile in structuredContent.",
+                        )
+                    ],
+                    structuredContent=(
+                        result if isinstance(result, dict) else {"result": result}
+                    ),
+                )
+            )
+
+        # Tutti gli altri tool normali rimangono come prima
         try:
             # Proviamo a passare gli argomenti così come sono
             result = fn(**args)
             # Se la funzione è async, await
-            if hasattr(result, '__await__'):
+            if hasattr(result, "__await__"):
                 result = await result
         except TypeError as e:
             # Se la firma non combacia (ad es. tool senza parametri), riproviamo senza args
             try:
                 result = fn()
-                if hasattr(result, '__await__'):
+                if hasattr(result, "__await__"):
                     result = await result
             except Exception as e2:
                 return types.ServerResult(
@@ -1951,8 +2021,6 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
         else:
             text_msg = f"Risultato del tool {name} disponibile in structuredContent."
 
-        # Il risultato vero lo mettiamo in structuredContent,
-        # così il modello lo vede in modo strutturato
         return types.ServerResult(
             types.CallToolResult(
                 content=[
@@ -1961,7 +2029,9 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
                         text=text_msg,
                     )
                 ],
-                structuredContent=result if isinstance(result, dict) else {"result": result},
+                structuredContent=(
+                    result if isinstance(result, dict) else {"result": result}
+                ),
             )
         )
 

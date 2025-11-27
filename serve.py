@@ -121,6 +121,15 @@ import weaviate
 from weaviate.classes.init import Auth
 from weaviate.classes.query import MetadataQuery
 
+# OpenAI client per descrizioni immagini
+from openai import OpenAI
+
+_OPENAI_CLIENT = None
+if os.environ.get("OPENAI_API_KEY"):
+    _OPENAI_CLIENT = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+else:
+    print("[query-caption] WARNING: OPENAI_API_KEY non impostata, niente descrizioni testuali per le query.")
+
 # In-memory stato Vertex
 _VERTEX_HEADERS: Dict[str, str] = {}
 _VERTEX_REFRESH_THREAD_STARTED = False
@@ -1208,7 +1217,21 @@ def hybrid_search(
             return {"error": f"Collection '{collection}' not found"}
 
         if image_b64:
-            vec = _vertex_embed(image_b64=image_b64, text=query if query else None)
+            # 1️⃣ generiamo una descrizione testuale ad hoc per la query
+            query_caption = describe_image_for_query(image_b64)
+            if query_caption:
+                print(f"[hybrid_search] query_caption (len={len(query_caption)}): {query_caption[:120]}...")
+            else:
+                print("[hybrid_search] nessuna query_caption generata, uso solo immagine")
+
+            # 2️⃣ vettore Vertex con immagine + testo descrittivo
+            vec = _vertex_embed(
+                image_b64=image_b64,
+                text=query_caption  # NOTA: qui usiamo la descrizione GPT, non la query utente
+            )
+
+            # 3️⃣ hybrid query: BM25 usa eventuale query testuale dell'utente,
+            #     il vettore usa immagine + descrizione
             hybrid_params: Dict[str, Any] = {
                 "query": query if query else "",
                 "alpha": alpha,
@@ -1219,6 +1242,7 @@ def hybrid_search(
             }
             if query_properties:
                 hybrid_params["query_properties"] = query_properties
+
             resp = coll.query.hybrid(**hybrid_params)
         else:
             hybrid_params = {
@@ -1386,6 +1410,57 @@ def _vertex_embed(
     if getattr(resp, "embedding", None):
         return list(resp.embedding)
     raise RuntimeError("No embedding returned from Vertex AI")
+
+
+def describe_image_for_query(image_b64: str) -> Optional[str]:
+    """
+    Usa GPT per generare una descrizione breve e tecnica del pezzo meccanico
+    nell'immagine di query, da usare come parte testuale del vettore Vertex.
+    """
+    if _OPENAI_CLIENT is None:
+        return None
+
+    try:
+        resp = _OPENAI_CLIENT.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Descrivi in modo conciso ma tecnico la forma del pezzo meccanico mostrato. "
+                                "Ignora completamente numeri, quote, cartigli e testi. "
+                                "Concentrati solo sulla geometria: tipo di pezzo (ingranaggio, flangia, albero, pignone, ecc.), "
+                                "fori, gole, spallamenti, denti, cave, smussi, raggi, ecc. "
+                                "Se vedi più viste 2D (frontale, laterale, sezione), usale mentalmente per ricostruire la forma 3D. "
+                                "Massimo 4 frasi, non più di 800 caratteri."
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_b64}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            max_tokens=256,
+        )
+
+        caption = resp.choices[0].message.content.strip()
+
+        MAX_CAPTION_CHARS = 900  # sotto al limite Vertex 1024
+        if len(caption) > MAX_CAPTION_CHARS:
+            caption = caption[:MAX_CAPTION_CHARS]
+
+        return caption
+
+    except Exception as e:
+        print(f"[query-caption] errore nella descrizione immagine: {e}")
+        return None
 
 
 @mcp.tool()

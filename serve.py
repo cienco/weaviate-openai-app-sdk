@@ -866,7 +866,7 @@ async def image_search_http(request):
             collection=collection,
             query="",  # niente testo utente, è una pura ricerca per immagine
             limit=limit,
-            alpha=0.5,  # bilancia tra BM25 e vettoriale (0.5 = 50% testo, 50% vettore)
+            alpha=0.2,  # bilancia tra BM25 e vettoriale (0.5 = 50% testo, 50% vettore)
             query_properties=["caption", "name"],
             image_id=image_id,
             image_url=image_url,
@@ -1169,7 +1169,7 @@ def hybrid_search(
     collection: str,
     query: str,
     limit: int = 10,
-    alpha: float = 0.8,
+    alpha: float = 0.2,
     query_properties: Optional[Any] = None,
     image_id: Optional[str] = None,
     image_url: Optional[str] = None,

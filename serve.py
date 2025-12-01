@@ -1300,6 +1300,17 @@ def hybrid_search(
                 hybrid_params["query_properties"] = query_properties
             resp = coll.query.hybrid(**hybrid_params)
 
+        # Log dei risultati nel formato Colab
+        print("[DEBUG] Risultati hybrid search:")
+        for o in getattr(resp, "objects", []) or []:
+            name = getattr(o, "properties", {}).get("name", "N/A")
+            md = getattr(o, "metadata", None)
+            score = getattr(md, "score", None)
+            if score is not None:
+                print(f"{name}  score={score:.4f}")
+            else:
+                print(f"{name}  score=N/A")
+
         out = []
         for o in getattr(resp, "objects", []) or []:
             md = getattr(o, "metadata", None)
@@ -1466,7 +1477,7 @@ def describe_image_for_query(image_b64: str) -> Optional[str]:
 
     try:
         resp = _OPENAI_CLIENT.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             temperature=0,
             max_tokens=350,
             messages=[

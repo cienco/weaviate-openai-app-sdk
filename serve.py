@@ -320,12 +320,6 @@ def _connect():
         if not ("_VERTEX_HEADERS" in globals() and _VERTEX_HEADERS and _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key")):
             if _sync_refresh_vertex_token():
                 headers.update(_VERTEX_HEADERS)
-                token = _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key")
-                if token:
-                    if os.environ.get("GOOGLE_APIKEY") == token:
-                        os.environ.pop("GOOGLE_APIKEY", None)
-                    if os.environ.get("PALM_APIKEY") == token:
-                        os.environ.pop("PALM_APIKEY", None)
             else:
                 print("[vertex-oauth] unable to obtain Vertex token synchronously")
         elif "_VERTEX_HEADERS" in globals() and _VERTEX_HEADERS:
@@ -434,6 +428,9 @@ def _update_client_grpc_metadata(client):
             vertex_token = _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key") or _VERTEX_HEADERS.get("x-goog-vertex-api-key")
             if vertex_token:
                 grpc_meta["x-goog-vertex-api-key"] = vertex_token
+                # Aggiorna anche le variabili d'ambiente per Weaviate vectorizer
+                os.environ["GOOGLE_APIKEY"] = vertex_token
+                os.environ["PALM_APIKEY"] = vertex_token
             if _VERTEX_USER_PROJECT:
                 grpc_meta["x-goog-user-project"] = _VERTEX_USER_PROJECT
             auth = _VERTEX_HEADERS.get("Authorization") or _VERTEX_HEADERS.get("authorization")

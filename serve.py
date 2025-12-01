@@ -281,10 +281,9 @@ def _sync_refresh_vertex_token() -> bool:
     global _VERTEX_HEADERS
     _VERTEX_HEADERS = _build_vertex_header_map(token)
     print(f"[vertex-oauth] sync token refresh (prefix: {token[:10]}...)")
-    if os.environ.get("GOOGLE_APIKEY") == token:
-        os.environ.pop("GOOGLE_APIKEY", None)
-    if os.environ.get("PALM_APIKEY") == token:
-        os.environ.pop("PALM_APIKEY", None)
+    # Aggiorna anche le variabili d'ambiente per Weaviate vectorizer
+    os.environ["GOOGLE_APIKEY"] = token
+    os.environ["PALM_APIKEY"] = token
     return True
 
 
@@ -952,7 +951,7 @@ async def image_search_http(request):
             collection=collection,
             query="",  # niente testo utente, è una pura ricerca per immagine
             limit=limit,
-            alpha=0.5,  # bilancia tra BM25 e vettoriale (0.5 = 50% testo, 50% vettore)
+            # Usa il default alpha=0.2 di hybrid_search (20% vettoriale, 80% BM25)
             query_properties=["caption", "name"],
             image_id=image_id,
             image_url=image_url,
@@ -1775,10 +1774,9 @@ def _refresh_vertex_oauth_loop():
             creds.refresh(Request())
             token = creds.token
             _VERTEX_HEADERS = _build_vertex_header_map(token)
-            if os.environ.get("GOOGLE_APIKEY") == token:
-                os.environ.pop("GOOGLE_APIKEY", None)
-            if os.environ.get("PALM_APIKEY") == token:
-                os.environ.pop("PALM_APIKEY", None)
+            # Aggiorna anche le variabili d'ambiente per Weaviate vectorizer
+            os.environ["GOOGLE_APIKEY"] = token
+            os.environ["PALM_APIKEY"] = token
             token_preview = token[:10] if token else None
             print(f"[vertex-oauth] 🔄 Vertex token refreshed (prefix: {token_preview}...)")
             sleep_s = 55 * 60

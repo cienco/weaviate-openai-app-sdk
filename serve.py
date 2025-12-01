@@ -1278,8 +1278,8 @@ def hybrid_search(
                 "return_properties": ["name", "source_pdf", "page_index", "mediaType", "image_b64"],
                 "return_metadata": MetadataQuery(score=True, distance=True),
             }
-            if query_properties:
-                hybrid_params["query_properties"] = query_properties
+            # Quando c'è un'immagine, limita BM25 a caption e name come nel Colab
+            hybrid_params["query_properties"] = ["caption", "name"]
 
             resp = coll.query.hybrid(**hybrid_params)
         else:

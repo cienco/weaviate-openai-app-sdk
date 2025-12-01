@@ -315,19 +315,30 @@ def _connect():
             headers[k] = vertex_key
         print("[vertex-oauth] using static Vertex API key from VERTEX_APIKEY")
 
-    if not headers and "_VERTEX_HEADERS" in globals() and _VERTEX_HEADERS:
-        headers.update(_VERTEX_HEADERS)
-    elif not headers:
-        if _sync_refresh_vertex_token():
+    # Assicuriamoci che _VERTEX_HEADERS contenga sempre il token più recente
+    if not headers:
+        # Se _VERTEX_HEADERS è vuoto o non contiene il token, facciamo un refresh
+        if not ("_VERTEX_HEADERS" in globals() and _VERTEX_HEADERS and _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key")):
+            if _sync_refresh_vertex_token():
+                headers.update(_VERTEX_HEADERS)
+                token = _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key")
+                if token:
+                    if os.environ.get("GOOGLE_APIKEY") == token:
+                        os.environ.pop("GOOGLE_APIKEY", None)
+                    if os.environ.get("PALM_APIKEY") == token:
+                        os.environ.pop("PALM_APIKEY", None)
+            else:
+                print("[vertex-oauth] unable to obtain Vertex token synchronously")
+        elif "_VERTEX_HEADERS" in globals() and _VERTEX_HEADERS:
             headers.update(_VERTEX_HEADERS)
-            token = _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key")
-            if token:
-                if os.environ.get("GOOGLE_APIKEY") == token:
-                    os.environ.pop("GOOGLE_APIKEY", None)
-                if os.environ.get("PALM_APIKEY") == token:
-                    os.environ.pop("PALM_APIKEY", None)
-        else:
-            print("[vertex-oauth] unable to obtain Vertex token synchronously")
+    else:
+        # Anche se abbiamo altri header, assicuriamoci che _VERTEX_HEADERS contenga il token
+        # per i metadata gRPC
+        if not ("_VERTEX_HEADERS" in globals() and _VERTEX_HEADERS and _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key")):
+            if _sync_refresh_vertex_token():
+                # Aggiungiamo anche agli header se non c'è già
+                if "X-Goog-Vertex-Api-Key" not in headers:
+                    headers.update(_VERTEX_HEADERS)
 
     vertex_token = headers.get("X-Goog-Vertex-Api-Key")
     if vertex_token:

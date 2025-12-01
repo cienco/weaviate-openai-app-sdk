@@ -409,6 +409,51 @@ def _connect():
     return client
 
 
+def _update_client_grpc_metadata(client):
+    """Aggiorna i metadata gRPC del client con le credenziali Vertex più recenti."""
+    try:
+        grpc_meta: Dict[str, str] = {}
+        
+        # Aggiungiamo i metadata Vertex se disponibili
+        if "_VERTEX_HEADERS" in globals() and _VERTEX_HEADERS:
+            vertex_token = _VERTEX_HEADERS.get("X-Goog-Vertex-Api-Key") or _VERTEX_HEADERS.get("x-goog-vertex-api-key")
+            if vertex_token:
+                grpc_meta["x-goog-vertex-api-key"] = vertex_token
+            if _VERTEX_USER_PROJECT:
+                grpc_meta["x-goog-user-project"] = _VERTEX_USER_PROJECT
+            auth = _VERTEX_HEADERS.get("Authorization") or _VERTEX_HEADERS.get("authorization")
+            if auth:
+                grpc_meta["authorization"] = auth
+        
+        # Aggiungiamo anche OpenAI key se disponibile
+        openai_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
+        if openai_key:
+            grpc_meta["x-openai-api-key"] = openai_key
+        
+        if not grpc_meta:
+            return
+        
+        # Aggiorna i metadata gRPC del client
+        conn = getattr(client, "_connection", None)
+        if conn is not None:
+            meta_list = list(grpc_meta.items())
+            try:
+                setattr(conn, "grpc_metadata", meta_list)
+            except Exception:
+                pass
+            try:
+                setattr(conn, "_grpc_metadata", meta_list)
+            except Exception:
+                pass
+            if hasattr(conn, "set_grpc_metadata"):
+                try:
+                    conn.set_grpc_metadata(meta_list)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"[vertex-oauth] warning: cannot update gRPC metadata: {e}")
+
+
 def _load_text_source(env_keys, file_path):
     if isinstance(env_keys, str):
         env_keys = [env_keys]
@@ -1226,6 +1271,9 @@ def hybrid_search(
         coll = client.collections.get(collection)
         if coll is None:
             return {"error": f"Collection '{collection}' not found"}
+
+        # Aggiorna i metadata gRPC prima della query per assicurarci che siano aggiornati
+        _update_client_grpc_metadata(client)
 
         if image_b64:
             # 1️⃣ generiamo una descrizione testuale ad hoc per la query

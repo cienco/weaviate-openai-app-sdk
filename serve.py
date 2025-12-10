@@ -205,11 +205,6 @@ def _get_weaviate_api_key() -> str:
     return api_key
 
 
-def _get_default_collection() -> str:
-    """Restituisce la collezione di default da variabile d'ambiente o 'Sinde'."""
-    return os.environ.get("WEAVIATE_DEFAULT_COLLECTION", "Sinde")
-
-
 def _resolve_service_account_path() -> Optional[str]:
     gac_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if gac_path and os.path.exists(gac_path):
@@ -888,7 +883,7 @@ async def image_search_http(request):
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-    collection = data.get("collection") or _get_default_collection()
+    collection = data.get("collection") or "Sinde"
     image_id = data.get("image_id")
     image_url = data.get("image_url")
     limit = data.get("limit") or 10
@@ -983,7 +978,6 @@ def get_config() -> Dict[str, Any]:
         "weaviate_url": os.environ.get("WEAVIATE_CLUSTER_URL")
         or os.environ.get("WEAVIATE_URL"),
         "weaviate_api_key_set": bool(os.environ.get("WEAVIATE_API_KEY")),
-        "weaviate_default_collection": _get_default_collection(),
         "openai_api_key_set": bool(
             os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
         ),
@@ -1207,17 +1201,19 @@ def semantic_search(collection: str, query: str, limit: int = 10) -> Dict[str, A
 
 @mcp.tool()
 def hybrid_search(
-    collection: Optional[str] = None,
-    query: str = "",
+    collection: str,
+    query: str,
     limit: int = 10,
     alpha: float = 0.2,
     query_properties: Optional[Any] = None,
     image_id: Optional[str] = None,
     image_url: Optional[str] = None,
 ) -> Dict[str, Any]:
-    # Usa la variabile d'ambiente o "Sinde" come default
-    if not collection:
-        collection = _get_default_collection()
+    if collection and collection != "Sinde":
+        print(
+            f"[hybrid_search] warning: collection '{collection}' requested, but using 'Sinde' as per instructions"
+        )
+        collection = "Sinde"
 
     if query_properties and isinstance(query_properties, str):
         try:
@@ -1590,15 +1586,17 @@ def insert_image_vertex(
 
 @mcp.tool()
 def image_search_vertex(
-    collection: Optional[str] = None,
+    collection: str,
     image_id: Optional[str] = None,
     image_url: Optional[str] = None,
     caption: Optional[str] = None,
     limit: int = 10,
 ) -> Dict[str, Any]:
-    # Usa la variabile d'ambiente o "Sinde" come default
-    if not collection:
-        collection = _get_default_collection()
+    if collection and collection != "Sinde":
+        print(
+            f"[image_search_vertex] warning: collection '{collection}' requested, but using 'Sinde' as per instructions"
+        )
+        collection = "Sinde"
 
     image_b64 = None
 
@@ -1899,7 +1897,7 @@ async def _list_tools() -> List[types.Tool]:
                 "properties": {
                     "collection": {
                         "type": "string",
-                        "description": f"Nome della collection (default: '{_get_default_collection()}' da WEAVIATE_DEFAULT_COLLECTION, può essere sovrascritto)",
+                        "description": "Nome della collection (sempre 'Sinde' per questo assistente)",
                     },
                     "query": {
                         "type": "string",
@@ -1934,16 +1932,14 @@ async def _list_tools() -> List[types.Tool]:
                         "description": "URL pubblico dell'immagine da usare per la ricerca",
                     },
                 },
-                "required": ["query"],
+                "required": ["collection", "query"],
                 "additionalProperties": False,
             }
             tool_title = "Ricerca ibrida (BM25 + vettoriale)"
-            default_collection = _get_default_collection()
             tool_description = (
-                f"Esegue una ricerca ibrida combinando ricerca keyword (BM25) e ricerca vettoriale. "
-                f"Tool principale per cercare nella collection {default_collection}.\n\n"
-                f"ISTRUZIONI: Di default usa collection='{default_collection}' (configurabile con WEAVIATE_DEFAULT_COLLECTION), "
-                "ma può essere sovrascritta. Usa query_properties=['caption','name'] e "
+                "Esegue una ricerca ibrida combinando ricerca keyword (BM25) e ricerca vettoriale. "
+                "Tool principale per cercare nella collection Sinde.\n\n"
+                "ISTRUZIONI: Usa SEMPRE collection='Sinde'. Usa query_properties=['caption','name'] e "
                 "return_properties=['name','source_pdf','page_index','mediaType']. Mantieni alpha=0.8 e limit=10 "
                 "salvo richieste diverse. Per ricerche per immagini, usa image_id (da /upload-image) o image_url."
             )
@@ -2053,8 +2049,8 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
 
             clean_args: Dict[str, Any] = {}
 
-            # collection con default da variabile d'ambiente
-            clean_args["collection"] = args.get("collection") or _get_default_collection()
+            # collection con default "Sinde"
+            clean_args["collection"] = args.get("collection") or "Sinde"
 
             # query obbligatoria
             q = args.get("query")
